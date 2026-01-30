@@ -686,3 +686,79 @@ test('franchise dashboard access', async ({ page }) => {
   await page.goto('/franchise-dashboard', { waitUntil: 'networkidle' }).catch(() => {});
   await expect(page.locator('body')).toBeVisible();
 });
+
+test('create franchise form access', async ({ page }) => {
+  let loggedInUser: User | undefined;
+
+  await page.route('*/**/api/auth', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const loginReq = route.request().postDataJSON();
+      if (loginReq.email === 'admin@jwt.com' && loginReq.password === 'admin') {
+        loggedInUser = { id: '1', name: 'Admin', email: 'admin@jwt.com', roles: [{ role: Role.Admin }] };
+        await route.fulfill({ json: { user: loggedInUser, token: 'token' } });
+      }
+    }
+  });
+
+  await page.route('*/**/api/user/me', async (route) => {
+    await route.fulfill({ json: loggedInUser });
+  });
+
+  await page.route('*/**/api/order/menu', async (route) => {
+    await route.fulfill({ json: [] });
+  });
+
+  await page.route('*/**/api/franchise*', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ json: { id: 1, name: 'NewFranchise', admins: [] } });
+    } else {
+      await route.fulfill({ json: { franchises: [] } });
+    }
+  });
+
+  await page.goto('/', { waitUntil: 'networkidle' }).catch(() => {});
+  await page.evaluate((user) => {
+    localStorage.setItem('user', JSON.stringify(user));
+  }, loggedInUser);
+
+  await page.goto('/admin-dashboard/create-franchise');
+  await expect(page.locator('body')).toBeVisible();
+});
+
+test('create store form access', async ({ page }) => {
+  let loggedInUser: User | undefined;
+
+  await page.route('*/**/api/auth', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const loginReq = route.request().postDataJSON();
+      if (loginReq.email === 'franchisee@jwt.com' && loginReq.password === 'franchisee') {
+        loggedInUser = { id: '2', name: 'Franchisee', email: 'franchisee@jwt.com', roles: [{ role: Role.Franchisee, objectId: '2' }] };
+        await route.fulfill({ json: { user: loggedInUser, token: 'token' } });
+      }
+    }
+  });
+
+  await page.route('*/**/api/user/me', async (route) => {
+    await route.fulfill({ json: loggedInUser });
+  });
+
+  await page.route('*/**/api/order/menu', async (route) => {
+    await route.fulfill({ json: [] });
+  });
+
+  await page.route('*/**/api/franchise*', async (route) => {
+    if (route.request().method() === 'POST' && route.request().url().includes('store')) {
+      await route.fulfill({ json: { id: 1, name: 'NewStore' } });
+    } else {
+      await route.fulfill({ json: { franchises: [{ id: 2, name: 'MyFranchise' }] } });
+    }
+  });
+
+  await page.goto('/', { waitUntil: 'networkidle' }).catch(() => {});
+  await page.evaluate((user) => {
+    localStorage.setItem('user', JSON.stringify(user));
+  }, loggedInUser);
+
+  await page.goto('/franchise-dashboard/create-store');
+  await expect(page.locator('body')).toBeVisible();
+});
